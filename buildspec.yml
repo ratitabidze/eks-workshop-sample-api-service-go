@@ -19,14 +19,17 @@ phases:
 
   post_build:
     commands:
-      - echo Build completed on `date`
-      - echo Pushing the Docker image...
-      - docker push $REPOSITORY_URI:latest
-      - echo Writing image definitions file...
-      - printf '[{"name":"hello-k8s","imageUri":"%s"}]' $REPOSITORY_URI:latest > imagedefinitions.json
-      - echo Deploying to Kubernetes...
+      - echo Deploying to Amazon EKS...
+    # Assume the mapped role so kubectl has the right AWS identity
+      - CREDENTIALS=$(aws sts assume-role --role-arn "$EKS_KUBECTL_ROLE_ARN" --role-session-name codebuild-kubectl --duration-seconds 900)
+      - export AWS_ACCESS_KEY_ID="$(echo ${CREDENTIALS} | jq -r '.Credentials.AccessKeyId')"
+      - export AWS_SECRET_ACCESS_KEY="$(echo ${CREDENTIALS} | jq -r '.Credentials.SecretAccessKey')"
+      - export AWS_SESSION_TOKEN="$(echo ${CREDENTIALS} | jq -r '.Credentials.SessionToken')"
+    # Now we can talk to the cluster and have RBAC via aws-auth mapping
       - aws eks update-kubeconfig --region $REGION --name k3s-lab
       - kubectl apply -f hello-k8s.yml
+      - printf '[{"name":"hello-k8s","imageUri":"%s"}]' $REPOSITORY_URI:latest > imagedefinitions.json
+
 
 artifacts:
   files: imagedefinitions.json
